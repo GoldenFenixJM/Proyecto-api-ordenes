@@ -19,37 +19,44 @@ const createAccount = async(req, res)=>{
     }
 }
 
+const collectables = [] //Arreglo de coleccionables
+
 // Endpoint para agregar dinero a una cuenta
 const fundAccount = async (req, res) => {
     try {
-        const {params:{id}}=req 
+        const {params:{id}}=req // Obtiene el id de la cuenta
         const {body: account} = req
-        const {money: moneyToAdd} = account
-        const AccountDb = db.collection('accounts').doc(id)
-        const {_fieldsProto} = await AccountDb.get()
-        const currentMoney= parseInt(_fieldsProto.money.integerValue)
+        const {money: moneyToAdd} = account // Obtiene el dinero a agregar
+        const AccountDb = db.collection('accounts').doc(id) // Acceso a la colección
+        const {_fieldsProto} = await AccountDb.get() // Obtiene los datos de la cuenta
+        const currentMoney= parseInt(_fieldsProto.money.integerValue) // Obtiene el dinero de la cuenta
+        // Se tiene que validar que el dinero a agregar sea un número y que sea positivo
+        if (typeof moneyToAdd !== 'number' || moneyToAdd < 0) {
+            res.send({
+                status: 400,
+                message: 'El dinero a agregar debe ser un número positivo'
+            })
+        }
+        else{
         const newmoney = currentMoney + moneyToAdd
         const resp = await AccountDb.update({ //Reemplazando
             money: newmoney
         })
-        res.send({
+        res.send({// Manda el dinero actualizado
             current_balance: {
                 money: newmoney,
-                collectables: [{
-                    "collection_name": "CARD_1",
-                    "amount": 2,
-                    "collection_price": 50
-                }]
+            collectables
             },
             business_errors: []
         })
+    }
     } catch(error) {
         res.send(error)
     }
 }
 
 // Array donde se guardan los objetos
-const collectables = []
+
 // Endpoint para crear una orden de compra y venta
 const Order = async (req, res) => {
     const {id} =req.params // Obtiene el id de la cuenta
@@ -94,7 +101,13 @@ const Order = async (req, res) => {
     }
     // Si la operación es de venta y se tiene el objeto y la cantidad suficiente
     if (operation === 'SELL') { 
-        const collectable = collectables.find(collectable => collectable.collection_name === collection_name) //Buscamos el objeto en la lista de objetos
+        
+        const collectable = collectables.find(collectable => collectable.collection_name === collection_name) 
+        // Si el objeto existía y se vendieron todos eliminamos el objeto de la lista
+        if (collectable.amount === 0) {
+            const index = collectables.indexOf(collectable)
+            collectables.splice(index, 1)
+        }//Buscamos el objeto en la lista de objetos
         if (collectable && collectable.amount>=amount) { //Si el objeto existe y la cantidad es suficiente
             const newMoney = money + (collection_price*amount) //Sumamos el dinero
             await AccountDb.update({money: newMoney}) //Actualizamos el dinero
@@ -104,7 +117,7 @@ const Order = async (req, res) => {
                     money: newMoney,
                     collectables
                 },
-            })
+            }) 
         } else { // Si la operación es de venta y no se tiene el objeto o la cantidad suficiente
             res.send({
                 current_balance: {//Mandamos la respuesta
@@ -114,7 +127,7 @@ const Order = async (req, res) => {
                 business_errors: [//Mandamos el error
                     {
                         code: 'INSUFFICIENT_COLLECTABLES',
-                        message: 'No tienes suficientes coleccionables para vender'
+                        message: 'No tienes suficientes coleccionables para vender o no tienes el articulo'
                     }
                 ]
             })
